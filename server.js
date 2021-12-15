@@ -1,46 +1,52 @@
-const http = require('http')
-const url = require('url')
-const client = require('prom-client')
+'use strict';
 
-// Create a Registry which registers the metrics
-const register = new client.Registry()
+const express = require('express');
 
-// Add a default label which is added to all metrics
-register.setDefaultLabels({
-  app: 'example-nodejs-app'
+// Constants
+const PORT = 5000;
+const HOST = 'localhost';
+
+// App
+const client = require('prom-client');
+const collectDefaultMetrics = client.collectDefaultMetrics;
+// Probe every 5th second.
+collectDefaultMetrics({ timeout: 5000 });
+
+const counter = new client.Counter({
+  name: 'node_request_operations_total',
+  help: 'The total number of processed requests'
+});
+
+const histogram = new client.Histogram({
+  name: 'node_request_duration_seconds',
+  help: 'Histogram for the duration in seconds.',
+  buckets: [1, 2, 5, 6, 10]
+});
+
+const app = express();
+app.get('/', (req, res) => {
+
+  //Simulate a sleep
+  var start = new Date()
+  var simulateTime = 1000
+
+  setTimeout(function(argument) {
+    // execution time simulated with setTimeout function
+    var end = new Date() - start
+    histogram.observe(end / 1000); //convert to seconds
+  }, simulateTime)
+
+  counter.inc();
+  
+  res.send('Hello world\n');
+});
+
+
+// Metrics endpoint
+app.get('/metrics', (req, res) => {
+  res.set('Content-Type', client.register.contentType)
+  res.end(client.register.metrics())
 })
 
-// Enable the collection of default metrics
-client.collectDefaultMetrics({ register })
-
-// Create a histogram metric
-const httpRequestDurationMicroseconds = new client.Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in microseconds',
-  labelNames: ['method', 'route', 'code'],
-  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10]
-})
-
-// Register the histogram
-register.registerMetric(httpRequestDurationMicroseconds)
-
-// Define the HTTP server
-const server = http.createServer(async (req, res) => {
-    // Start the timer
-  const end = httpRequestDurationMicroseconds.startTimer()
-
-  // Retrieve route from request object
-  const route = url.parse(req.url).pathname
-
-  if (route === '/metrics') {
-    // Return all metrics the Prometheus exposition format
-    res.setHeader('Content-Type', register.contentType)
-    res.end(register.metrics())
-  }
-
-  // End timer and add labels
-  end({ route, code: res.statusCode, method: req.method })
-})
-
-// Start the HTTP server which exposes the metrics on http://localhost:8080/metrics
-server.listen(8080)
+app.listen(PORT, HOST);
+console.log(`Running on http://${HOST}:${PORT}`);
