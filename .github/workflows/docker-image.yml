@@ -17,3 +17,6 @@ jobs:
     - name: Build the Docker image
       run: |
         docker build -t assignment .
+    - name: Run the Docker image
+      run: |
+        docker run -d -p 1000:3000 assignment
